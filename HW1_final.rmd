@@ -1,0 +1,509 @@
+---
+title: "TS | HW1"
+author: "Краснов Иван, Тарасова София"
+output:
+  html_document:
+    df_print: paged
+---
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(tibble)
+
+library(forecast)
+library(zoo)
+library(xts)
+library(tseries)
+library(pander)
+library(Quandl) 
+library(stargazer)
+library(stats)
+library(foreach)
+library(fpp2)
+library(stringr)
+library(knitr)
+library(haven)
+library(lmtest)
+library(foreign)
+library(grid)
+library(vcd)
+library(kableExtra) 
+```
+```{r}
+options(scipen = 999)
+```
+
+```{r}
+full_data = read_csv("LBMA-SILVER.csv")
+```
+
+```{r}
+work_data = full_data %>% select("Date","USD") %>% filter(Date > "2020-10-06")
+summary(work_data)
+```
+
+```{r}
+work_data %>% 
+  ggplot(aes(USD, fill = "e03450")) + 
+  scale_y_continuous(name = "Density") +
+   scale_x_continuous(name = "Fixed prices of silver, US dollars") +
+  geom_density(alpha = 0.5)
+```
+
+```{r}
+plot(work_data, ylab = "USD", xlab = "Date", type="o")
+```
+```{r}
+data = work_data
+raw = full_data  %>% select("Date","USD")
+```
+
+
+# Descriptive analisys
+
+### Descriptive statistics
+
+
+```{r}
+nam = 'Estimates and Statistics'
+n = nrow(data)
+mean = round(mean(data$USD),2)
+variance = round(var(data$USD),2)
+sd = round(sd(data$USD),2)
+median = round(median(data$USD),2)
+min = round(min(data$USD),2)
+max = round(max(data$USD),2)
+range = round((max-min),2)
+
+metrics = data.frame(n,mean,median,variance,sd,min,max,range)
+metrics %>% kable(format = "html",caption = " Estimates and Statistics ") %>% kable_styling(bootstrap_options = c("striped"))
+```
+
+### Base graph
+
+
+```{r}
+data %>%  ggplot(aes(x = as.Date(Date), y = USD)) + 
+  geom_line(color = "#69b3a2")  + 
+  labs(title = "Fixed prices of silver by LBMA, total",
+       x = "", 
+       y = "Prices, US dollars",
+       caption = 'Source: NASDAQ') + 
+  scale_x_continuous(breaks = c(as.Date("2020-10-06"),  as.Date("2021-01-31"),  as.Date("2021-07-31"), as.Date("2022-01-31"))) + 
+  scale_y_continuous() + 
+  annotate("text", label = "Mean", x = as.Date("2021-05-31"), y = 24.83, size = 3, colour = "black") + 
+  geom_line(aes(y = mean, color = 'coral2'), linetype = "dashed") + 
+  theme(legend.position ="none")
+```
+
+# Testing for stationarity
+
+первый способ сделать тс 
+
+```{r}
+ts <- ts(data, frequency = 1, start = c(as.Date(2020-10-06)))
+```
+
+второй 
+
+```{r}
+series <- xts(data$USD, data$Date)
+```
+
+второй смог лучше
+
+###Тестируем нашу выборку без преобразований
+
+```{r}
+adf.test(series)
+kpss.test(series)
+```
+
+###Первая разность 
+
+```{r}
+value_old <- as.vector(data$USD)
+value_old_changed<-diff(value_old)
+value_old_changed<- c(NA,value_old_changed)
+data$value_changed <- value_old_changed
+```
+
+###Вторая разность:
+
+```{r}
+value_2dif <- as.vector(data$value_changed)
+value_2dif<-diff(value_2dif)
+value_2dif<- c(NA,value_2dif)
+data$value_changed_2 <- value_2dif
+```
+
+###График первой разности:
+
+```{r}
+g4 = data %>% ggplot(aes(x = as.Date(Date), y = value_old_changed)) + 
+  geom_line(color = "#69b3a2")  + 
+  labs(title = "1 diff of prices, US dollars",
+       x = "", 
+       y = "") + 
+  scale_x_continuous(breaks = c(as.Date("2020-10-06"),  as.Date("2021-01-31"),  as.Date("2021-07-31"), as.Date("2022-01-31"))) + 
+  scale_y_continuous() + 
+  theme(legend.position = "none")
+g4
+```
+
+###График второй разности:
+
+```{r}
+g4_2 = data %>% ggplot(aes(x = as.Date(Date), y = value_changed_2)) + 
+  geom_line(color = "#69b3a2")  + 
+  labs(title = "2 diff of prices of silver",
+       x = "", 
+       y = "2 diff of prices, US dollars") + 
+  scale_x_continuous(breaks = c(as.Date("2020-10-06"),  as.Date("2021-01-31"),  as.Date("2021-07-31"), as.Date("2022-01-31"))) + 
+  scale_y_continuous() + 
+  theme(legend.position = "none")
+g4_2
+```
+#Testing of 1 diff
+
+```{r}
+dif1 <- data %>% dplyr::select(Date, value_changed)
+
+library(zoo)
+dif1$Date <- as.Date(dif1$Date)
+
+series_dif1 <- xts(dif1$value_changed, dif1$Date)
+
+series_dif1 <- na.omit(series_dif1)
+
+dif1 <- na.omit(dif1)
+```
+
+```{r}
+adf.test(series_dif1)
+kpss.test(series_dif1)
+```
+## Вторая разность:
+
+```{r}
+dif2 <- data %>% dplyr::select(Date, value_changed_2)
+
+series_dif2 <- xts(dif2$value_changed_2, dif2$Date)
+
+series_dif2 <- na.omit(series_dif2)
+```
+
+```{r}
+adf.test(series_dif2)
+kpss.test(series_dif2)
+```
+
+## Лог диффы:
+
+```{r}
+log_dif_old <- diff(log(value_old), lag = 1)
+log_dif_old<- c(NA,log_dif_old)
+data$log_dif_old <- log_dif_old
+```
+
+```{r}
+logdif <- data %>% dplyr::select(Date, log_dif_old)
+
+series_logdif <- xts(logdif$log_dif_old, logdif$Date)
+
+series_logdif <- na.omit(series_logdif)
+
+adf.test(series_logdif)
+kpss.test(series_logdif)
+```
+```{r}
+ts_final = series_dif1
+
+
+
+```
+
+# Modelling
+
+### Fitiing and examing results
+
+## PACF
+
+```{r}
+pacf1 <- pacf(dif1$value_changed, plot = FALSE)
+plot(pacf1, main = "PACF")
+```
+
+## ACF
+
+```{r}
+acf1 <- acf(dif1$value_changed, plot = FALSE)
+plot(acf1, main = "ACF")
+```
+
+
+Следовательно, 
+
+
+### Data partition
+
+```{r}
+fitting1 <- ts_final["2020-10-06/2021-08-06"]
+validation1 <- ts_final["2021-08-09/2021-11-08"]
+testing1 <- ts_final["2021-11-09/2022-02-10"]
+```
+
+
+```{r}
+phat <- 3
+qhat <- 3
+
+# setting critical level(s)
+alpha <- 0.05
+
+# other shortcuts
+N    <- length(fitting1) # number of obs in the transformed series
+pq   <- expand.grid(0:phat,0:qhat) # all combinations of (p,q)
+M    <- nrow(pq) # number of specifications
+Lhat <- 5 # max lags to use in residual ACF analysis
+
+
+ ## Estiamte all the ARMA and collect the results
+
+SKIPm <- c(0) # the specs to skip (if there are errors or something)
+
+#loop over all the combinations of (p,q) and estimate the ARMAs
+ARMAs1 <- foreach(m=seq(1:M)[!(1:M %in% SKIPm)], .combine=rbind) %do% {
+  
+  # the orders
+  p_ <- pq[m,1]
+  q_ <- pq[m,2]
+  
+  # the estimates
+  armapq <- arima(fitting1, c(p_,0,q_), method="ML")
+  
+  # the AR part coefficients (only valid for p>0)
+  if(p_>0) {arcoefpq <- armapq$coef[1:p_]}
+  
+  # stationarity of AR part (only valid for p>0, TRUE for p=0)
+  if(p_>0) {
+    statAR <- sum(abs(polyroot(c(1,-arcoefpq)))>1)==p_
+  } else {
+    statAR <- TRUE
+  }
+  
+  # the residuals
+  respq <- armapq$residuals
+  
+  # the LB test results
+  LBpvalpq <- Box.test(respq[-1], lag = Lhat, type = c("Ljung-Box"), fitdf=p_+q_)$p.value
+
+  # info criteria
+  aicpq <- AIC(armapq)
+  bicpq <- AIC(armapq, k=log(N))
+  
+  # combine the results together
+  data.frame(m    = m,         # spec number
+    p    = p_,        # AR order
+    q    = q_,        # MA order
+    stat = statAR,    # AR part stationarity check
+    LB   = LBpvalpq,  # LB test p-value
+    AIC  = aicpq,     # AIC
+    SBIC = bicpq)     # SBIC
+}
+
+# all the results
+# print(ARMAs)
+
+# remove invalid LB test results
+ARMAs1 <- ARMAs1[!is.nan(ARMAs1$LB),]
+
+# keep only stationary & without residual correlation 
+ARMAs1 <- ARMAs1[ARMAs1$stat == 1 & ARMAs1$LB >= alpha,] 
+
+# sort by SBIC (keep top-5)
+ARMAs1[order(ARMAs1$SBIC)[1:5],]
+
+ARMAs3_3 <- foreach(m = ARMAs1[order(ARMAs1$SBIC)[1:5],1]) %do% {
+  arima(fitting1, c(pq[m,1],0,pq[m,2]))
+}
+
+```
+
+### Validation
+
+```{r, warning=FALSE, message=FALSE, results='asis'}
+forecasts1 <- foreach(m = ARMAs3_3[1:5], .combine = cbind) %dopar% {
+  forecast(m, h = length(validation1))$mean
+}
+```
+
+# Asymmetric loss function
+
+```{r}
+ALF <- function (x) {
+  ifelse (x < 0, return(abs(x)), return(1.5 * x))
+}
+```
+
+We consider symmetric and asymmetric loss functions
+```{r, warning=FALSE, message=FALSE, results='asis'}
+#symmetric
+MAPE1 <- foreach(m = forecasts1[,1:5], .combine = cbind) %dopar% {
+  sum(abs((validation1 - m)/validation1))/length(validation1)
+}
+
+#asymmetric loss function
+ALF1 = list()
+ALF11 = 0
+j = 1
+while (j <= 5){
+  for (i in (1:3)){
+    ALF11 = ALF11 + ALF(as.data.frame(validation1)$V1[i] - as.data.frame(forecasts1)[i,j])/length(as.data.frame(validation1)$V1)
+  }
+  ALF1 = append(ALF1, ALF11)
+  j = j + 1
+  ALF11 = 0
+}
+
+error1 <- rbind.data.frame('MAPE' = MAPE1, "ALF" = ALF1)
+                    
+error1
+``` 
+
+### Testing
+
+
+```{r, warning=FALSE, message=FALSE, results='asis'}
+model1 = arima(fitting1, c(0,1,0))
+forecasts1<- forecast(model1, h = length(testing1))$mean
+model2 = arima(fitting1, c(1,0,1))
+forecasts2 <- forecast(model2, h = length(testing1))$mean
+model3 = arima(fitting1, c(0,5,1))
+forecasts3 <- forecast(model3, h = length(testing1))$mean
+model4 = arima(fitting1, c(1,2,0))
+forecasts4 <- forecast(model4, h = length(testing1))$mean
+```
+
+
+### All forecasts 
+
+```{r}
+
+test_forecasts = data_frame("ARMA(0,0)" = forecasts1,
+                            "ARMA(1,1)" = forecasts2,
+                            "ARMA(0,1)" = forecasts3,
+                            "ARMA(1,0)" = forecasts4)
+for (i in c(3:4)){
+  test_forecasts[1,i] = test_forecasts[1,i] + dif1$value_changed[341]
+}
+
+for (i in c(3:4)){
+  test_forecasts[2,i] = test_forecasts[2,i] + test_forecasts[1,i]
+}
+
+for (i in c(3:4)){
+  test_forecasts[3,i] = test_forecasts[3,i] + test_forecasts[2,i]
+}
+
+
+test_forecasts$value = dif1$value_changed[341]
+
+head(test_forecasts)
+```
+
+```{r}
+MAPE <- foreach(m = test_forecasts[,1:4], .combine = cbind) %dopar% {
+  sum(abs((test_forecasts$value - m)/test_forecasts$value))/length(test_forecasts$value)
+}
+
+ALF_test = list()
+ALF_test_1 = 0
+j = 1
+while (j <= 4){
+  for (i in (1:4)){
+    ALF_test_1 = ALF_test_1 + ALF(test_forecasts$value[i] - test_forecasts[i,j])/length(test_forecasts$value)
+  }
+  ALF_test = append(ALF_test, ALF_test_1)
+  j = j + 1
+  ALF_test_1 = 0
+}
+
+error <- rbind.data.frame('MAPE' = MAPE, 'ALF' = unname(ALF_test))
+                    
+error
+```
+
+## Выбираем ARMA(1,1) 
+
+# Residuals
+
+```{r}
+arma <- Arima(data$USD, order = c(1,0,1))
+
+forec_raw_data = forecast(arma, h = length(data$USD))
+
+resid = as.data.frame(forec_raw_data$residuals)
+resid = resid %>% 
+  mutate(abs = abs(x)) %>% 
+  mutate(squared = x^2)
+
+loss = data.frame(forec = forec_raw_data$mean, resid = forec_raw_data$residuals)
+ggplot(loss) +
+  geom_point(aes(x = forec, y = resid), col = 'red')
+
+ggplot(resid) +
+  geom_point(aes(x = x, y = abs), col = 'red')
+
+ggplot(resid) +
+  geom_point(aes(x = x, y = squared), col = 'red')
+
+acf(ts(forec_raw_data$residuals), main ='Residuals MA(1)')
+
+checkresiduals(arma)
+box = Box.test(forec_raw_data$residuals, lag = 3.26, type = "Ljung-Box")
+```
+```{r}
+forecast = data.frame("Time" = data$Date,
+                      "Value" = data$USD,
+                      "Forecast" = forec_raw_data$mean,
+                      "Fitted" = fitted(arma),
+                      "Lower" = forec_raw_data$lower,
+                      "Upper" = forec_raw_data$upper)
+
+ggplot(forecast, aes(x = Time)) +
+  geom_line(aes(y = Value), col = 'red')  +
+  geom_line(aes(y = Fitted), col = 'green') +
+  ggtitle ("ARMA (1,0,1)  fitting") +
+  theme_minimal() + 
+    labs(x = " ", y = "")
+```
+
+```{r}
+ggplot(forecast, aes(x = Time)) +
+  geom_line(aes(y = Forecast), col = 'blue')  +
+  geom_line(aes(y = Upper.95.), col = 'pink') +
+  geom_line(aes(y = Lower.95.), col = 'violet') +
+  ggtitle ("ARMA (1,0,1)  forecast") +
+  theme_minimal() + 
+    labs(x = " ", y = "")
+```
+
+
+
+#Predictions and graphs
+```{r}
+arma <- arima(series, order = c(1,0,1))
+forecast_2022half <- forecast(arma, h = 180)
+
+ past <- ts(series)
+
+autoplot(forecast_2022half) + autolayer(past)
+
+```
+
+```{r}
+accuracy(forecast_2022half)
+```
+
